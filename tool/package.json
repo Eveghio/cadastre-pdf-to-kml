@@ -1,0 +1,4 @@
+{ "name": "cadastre-pdf-to-kml", "private": true, "type": "module",
+  "scripts": { "build": "node build.mjs" },
+  "dependencies": { "pdfjs-dist": "4.10.38" },
+  "devDependencies": { "@napi-rs/canvas": "^0.1.0" } }
