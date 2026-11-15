@@ -120,7 +120,8 @@ function card(file, r, err) {
   if (err) { c.classList.add('bad'); c.appendChild(el('div', 'err', 'შეცდომა: ' + err)); return c; }
   const { g } = r;
   const d = g.diffPct;
-  const level = g.raster ? (!r.inGeorgia ? 'bad' : 'warn') : (!Number.isFinite(d) || Math.abs(d) > 1 || !r.inGeorgia) ? 'bad' : (Math.abs(d) > 0.5 || g.warnings.length || (g.meta.zoneCorrected && r.zone === g.meta.zone) ? 'warn' : 'ok');
+  const tol = g.areaTolerancePct ?? 1; // 1%, ან მეტი, თუ გეგმის ფართობის დამრგვალება თავად აჭარბებს 1%-ს (პატარა ნაკვეთი)
+  const level = g.raster ? (!r.inGeorgia ? 'bad' : 'warn') : (!Number.isFinite(d) || Math.abs(d) > tol || !r.inGeorgia) ? 'bad' : ((tol === 1 && Math.abs(d) > 0.5) || g.warnings.length || (g.meta.zoneCorrected && r.zone === g.meta.zone) ? 'warn' : 'ok');
   c.classList.add(level);
   const top = el('div', 'top');
   top.appendChild(preview(g.groups));
@@ -128,7 +129,7 @@ function card(file, r, err) {
   info.appendChild(el('div', 'code', g.meta.code || '(კოდი ვერ წავიკითხე)'));
   const rows = [
     ['ფართობი PDF-ში' + (g.meta.areaZone ? ` (${g.meta.areaZone}N)` : ''), g.meta.areaPdf != null ? g.meta.areaPdf.toLocaleString('ka-GE') + ' კვ.მ' : '—'],
-    ['გამოთვლილი', g.areaCalc.toFixed(1) + ' კვ.მ'],
+    ['გამოთვლილი', g.areaCalc.toFixed(g.areaCalc < 100 ? 2 : 1) + ' კვ.მ'], // პატარა ნაკვეთზე 6.49 და არა 6.5
     ['სხვაობა', Number.isFinite(d) ? (d >= 0 ? '+' : '') + d.toFixed(2) + '%' : '—'],
     ['რგოლები / წვეროები', `${g.ringCount} / ${g.vertexCount}` + (g.groups.some(x => x.holes.length) ? ' (ხვრელით)' : '')],
     ['საყრდენი ბადე', `${g.info.gridX}×${g.info.gridY}, ნარჩენი ${Math.max(g.info.residX, g.info.residY).toFixed(2)} მ` + (g.info.glyphLabels ? ' (ციფრები ნახაზიდან ამოცნობილი)' : '')],

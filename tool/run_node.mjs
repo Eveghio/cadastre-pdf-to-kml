@@ -19,9 +19,9 @@ const zip = core.makeZip([
   { name: stem + ".dbf", data: shp.dbf }, { name: stem + ".prj", data: shp.prj }]);
 fs.writeFileSync(path.join(outDir, stem + "_shp.zip"), zip);
 fs.writeFileSync(path.join(outDir, stem + ".json"), JSON.stringify({
-  meta: g.meta, info: g.info, areaCalc: g.areaCalc, diffPct: g.diffPct, warnings: g.warnings,
+  meta: g.meta, info: g.info, areaCalc: g.areaCalc, diffPct: g.diffPct, areaTolerancePct: g.areaTolerancePct, warnings: g.warnings, notes: g.notes,
   groups: g.groups, ll }));
 console.log(path.basename(pdf), "| code", g.meta.code, "rings", g.ringCount, "verts", g.vertexCount,
   "| area pdf", g.meta.areaPdf, "calc", g.areaCalc.toFixed(2), "diff", g.diffPct.toFixed(4) + "%",
   "| grid", g.info.gridX + "/" + g.info.gridY, "scale", g.info.scaleX.toFixed(4), g.info.scaleY.toFixed(4),
-  "| warnings:", g.warnings.length ? g.warnings.join(" ; ") : "none");
+  "| warnings:", g.warnings.length ? g.warnings.join(" ; ") : "none", "| notes:", g.notes.length ? g.notes.join(" ; ") : "none");
