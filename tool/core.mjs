@@ -162,7 +162,9 @@ export function buildTransform(ex) {
   let px = robustFit(snap(ex.labelsX, vx)), py = robustFit(snap(ex.labelsY, hy)), glyphLabels = false;
   if (px.length < 2 || py.length < 2) { // ციფრები ტექსტად არ არის: შეიძლება ასოების მოხაზულობებად იყოს დახატული
     const g = readGlyphLabels(ex, vx, hy);
-    if (g.px.length >= 2 && g.py.length >= 2) { px = robustFit(g.px); py = robustFit(g.py); glyphLabels = true; }
+    // საკმარისია ერთ ღერძზე 2 ხაზი და მეორეზე 1 (დიდი მასშტაბი, მაგ. 8 კვ.მ ნაკვეთი) - ქვემოთ isoAxis
+    const enough = (g.px.length >= 2 && g.py.length >= 1) || (g.px.length >= 1 && g.py.length >= 2);
+    if (enough && g.px.length + g.py.length > px.length + py.length) { px = robustFit(g.px); py = robustFit(g.py); glyphLabels = true; }
   }
   // დიდი მასშტაბის (მაგ. 1:500) გეგმაზე ერთ ღერძზე შეიძლება მხოლოდ ერთი ბადის ხაზი მოხვდეს.
   // მაშინ ამ ღერძის მასშტაბს მეორე ღერძიდან ვიღებთ (ძველი ArcMap ფორმატი იზოტროპულია: X/Y მასშტაბი ემთხვევა ≤0.2%-ით).
