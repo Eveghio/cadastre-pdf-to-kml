@@ -13,6 +13,7 @@ NAPR-ის (საჯარო რეესტრი) საკადასტ�
 | `tool/ui.js`, `tool/style.css` | ინტერფეისი |
 | `tool/build.mjs` | აწყობა → `tool/dist/` და `index.html` |
 | `tool/run_node.mjs` | იგივე ბირთვი Node-ში: `node run_node.mjs <pdf> <outdir>` |
+| `tool/batch_test.mjs` | მასობრივი ტესტი: ბევრი PDF (zip-ებიც) → კატეგორიები, ოფიციალურ კონტურთან შედარება, `report.html` / `results.csv` |
 | `python/pdf2kml.py` | Python ვერსია (PyMuPDF; JS-ს ჩამორჩება) |
 | `plan_reader/` | "საკადასტრო რუკის" PDF-ის ტიპის ამოცნობა (გეგმა / ნახაზი) |
 
@@ -23,6 +24,15 @@ cd tool
 npm install
 node build.mjs
 ```
+
+## მასობრივი ტესტი
+
+```
+cd tool
+node batch_test.mjs <PDF-ების საქაღალდე> <შედეგი> [--ref <ოფიციალური shp/kml/geojson/zip>]
+```
+
+თითო PDF-ს ანიჭებს კატეგორიას (`ok`, `ok_notes`, `ok_warnings`, `raster`, `area_mismatch`, `ref_mismatch`, `grid_missing`, `no_boundary`, `not_plan`...). ოფიციალური კონტური შედეგს გეომეტრიით ეწყვილება (IoU, Hausdorff, წანაცვლება). წარუმატებელი PDF-ები კოპირდება `failed/<კატეგორია>/`-ში.
 
 ## სიზუსტე
 

@@ -133,7 +133,7 @@ function card(file, r, err) {
     ['სხვაობა', Number.isFinite(d) ? (d >= 0 ? '+' : '') + d.toFixed(2) + '%' : '—'],
     ['რგოლები / წვეროები', `${g.ringCount} / ${g.vertexCount}` + (g.groups.some(x => x.holes.length) ? ' (ხვრელით)' : '')],
     ['საყრდენი ბადე', `${g.info.gridX}×${g.info.gridY}, ნარჩენი ${Math.max(g.info.residX, g.info.residY).toFixed(2)} მ` + (g.info.glyphLabels ? ' (ციფრები ნახაზიდან ამოცნობილი)' : '')],
-    ['სავარაუდო ცდომილება', (() => { const a = accuracyEstimate(g); return `ტიპური ±${a.typical.toFixed(2)} მ, მაქს. ±${a.max.toFixed(2)} მ`; })()],
+    ['სავარაუდო ცდომილება', (() => { const a = accuracyEstimate(g); const m = (v) => v < 0.05 ? `${(v * 100).toFixed(1)} სმ` : `${v.toFixed(2)} მ`; return `ტიპური ±${m(a.typical)}, მაქს. ±${m(a.max)}`; })()],
     ['PDF-ის ტიპი', g.raster ? 'რასტრული (სურათი)' : 'ვექტორული'],
   ];
   for (const [k, v] of rows) { const row = el('div', 'row'); row.appendChild(el('span', 'k', k)); row.appendChild(el('span', 'v', v)); info.appendChild(row); }
