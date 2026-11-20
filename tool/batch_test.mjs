@@ -27,7 +27,7 @@ export const CATEGORIES = {
   ok_notes: 'წარმატება შენიშვნით (მაგ. დამრგვალება)',
   ok_warnings: 'წარმატება გაფრთხილებით (ერთხაზიანი ბადე, მრუდები...)',
   raster: 'რასტრული (დაბალი სიზუსტე)',
-  ref_mismatch: 'ოფიციალურ კონტურს არ ემთხვევა (IoU < 0.95)',
+  ref_mismatch: 'ოფიციალურ კონტურს არ ემთხვევა (IoU < 0.95 და გადახრა > 1.5 pt)',
   area_mismatch: 'ფართობი ზღვარს გარეთაა',
   zone_ambiguous: 'UTM ზონა გაურკვეველია (37N/38N ორივე ჯდება)',
   outside_georgia: 'შედეგი საქართველოს გარეთ ხვდება',
@@ -93,7 +93,10 @@ function classifyError(msg, isRaster) {
 function classifyResult(g, inGeorgia, ref) {
   if (!inGeorgia) return 'outside_georgia';
   if (g.meta.zoneAssumed && !g.meta.zoneAuto && (g.meta.zoneCandidates || []).length > 1) return 'zone_ambiguous';
-  if (ref && ref.iou < 0.95) return 'ref_mismatch';
+  // პატარა ნაკვეთზე IoU მკაცრია (8 კვ.მ-ზე 0.1 მ გადახრა IoU-ს 0.9-მდე ამცირებს), ამიტომ ემთხვევა, თუ
+  // უდიდესი გადახრა ≤ 1.5 pt ქაღალდზე (წვეროების ხმაური ~0.35-0.4 pt, 447 გეგმა, 2026-11-20)
+  const refTolMeters = Math.max(0.05, 1.5 * Math.max(Math.abs(g.info.scaleX), Math.abs(g.info.scaleY)));
+  if (ref && ref.iou < 0.95 && ref.hausdorff > refTolMeters) return 'ref_mismatch';
   const tol = g.areaTolerancePct ?? 1;
   if (Number.isFinite(g.diffPct) && Math.abs(g.diffPct) > tol) return 'area_mismatch';
   if (g.raster) return 'raster';
@@ -173,14 +176,15 @@ function kmlPolys(text) { // KML: თითო Polygon = რგოლები�
   }
   return polys;
 }
-function geojsonPolys(obj) {
+function geojsonPolys(obj) { // -> [{ rings, code }]; code = properties.code (ექსთენშენის official.geojson)
   const out = [];
-  const g = (geom) => { if (!geom) return;
-    if (geom.type === 'Polygon') out.push(geom.coordinates.map(r => r.map(p => p.slice(0, 2))));
-    else if (geom.type === 'MultiPolygon') for (const p of geom.coordinates) out.push(p.map(r => r.map(q => q.slice(0, 2))));
-    else if (geom.type === 'GeometryCollection') geom.geometries.forEach(g); };
-  if (obj.type === 'FeatureCollection') obj.features.forEach(f => g(f.geometry));
-  else if (obj.type === 'Feature') g(obj.geometry); else g(obj);
+  const g = (geom, code) => { if (!geom) return;
+    // MultiPolygon-ის ყველა ნაწილი ერთ ობიექტად (even-odd), რომ ნაკვეთი ერთიანად შედარდეს
+    if (geom.type === 'Polygon') out.push({ rings: geom.coordinates.map(r => r.map(p => p.slice(0, 2))), code });
+    else if (geom.type === 'MultiPolygon') out.push({ rings: geom.coordinates.flatMap(p => p.map(r => r.map(q => q.slice(0, 2)))), code });
+    else if (geom.type === 'GeometryCollection') geom.geometries.forEach(x => g(x, code)); };
+  if (obj.type === 'FeatureCollection') obj.features.forEach(f => g(f.geometry, f.properties && f.properties.code));
+  else if (obj.type === 'Feature') g(obj.geometry, obj.properties && obj.properties.code); else g(obj);
   return out;
 }
 export function loadReferences(dir) {
@@ -191,7 +195,7 @@ export function loadReferences(dir) {
       try { for (const rings of readShp(f)) for (const ll of shpToLonLat(rings, zone === 'deg' ? null : zone)) refs.push({ file: path.relative(d, f), rings: ll }); } catch { }
     }
     for (const f of walk(d, ['.kml'])) for (const rings of kmlPolys(fs.readFileSync(f, 'utf8'))) refs.push({ file: path.relative(d, f), rings });
-    for (const f of walk(d, ['.geojson', '.json'])) { try { for (const rings of geojsonPolys(JSON.parse(fs.readFileSync(f, 'utf8')))) refs.push({ file: path.relative(d, f), rings }); } catch { } }
+    for (const f of walk(d, ['.geojson', '.json'])) { try { for (const { rings, code } of geojsonPolys(JSON.parse(fs.readFileSync(f, 'utf8')))) refs.push({ file: path.relative(d, f), rings, code }); } catch { } }
   }
   for (const r of refs) r.bb = bboxLL(r.rings);
   return refs;
@@ -233,13 +237,19 @@ export function compareRings(A, B) { // A, B: [ [ [lon,lat]... ] ] -> {iou, haus
   return { iou: uni ? inter / uni : 0, hausdorff: Math.max(...all), meanDist: all.reduce((s, x) => s + x, 0) / all.length,
     shiftE: ca[2] && cb[2] ? ca[0] / ca[2] - cb[0] / cb[2] : NaN, shiftN: ca[2] && cb[2] ? ca[1] / ca[2] - cb[1] / cb[2] : NaN };
 }
-function bestReference(llRings, refs) {
+function bestReference(llRings, refs, code) {
   const bb = bboxLL(llRings), pad = 0.0005;
   let best = null;
-  for (const r of refs) {
+  // ოფიციალურს კოდი აქვს (ექსთენშენის ZIP): მხოლოდ იმავე კოდთან; კოდის გარეშე ფაილებში - გეომეტრიით
+  const sameCode = code ? refs.filter(r => r.code === code) : [];
+  // კოდი გეგმიდან ვერ წავიკითხეთ -> ყველასთან გეომეტრიით (IoU ≥ 0.05, თორემ მეზობელი ნაკვეთი იქნება);
+  // კოდი ვიცით, მაგრამ ოფიციალურებში არ არის (მაგ. გაუქმებული/გაყოფილი) -> მხოლოდ უკოდო ფაილები
+  const pool = sameCode.length ? sameCode : code ? refs.filter(r => !r.code) : refs;
+  for (const r of pool) {
+    if (sameCode.length) { const c = compareRings(llRings, r.rings); if (!best || c.iou > best.iou) best = { ...c, file: r.file }; continue; }
     if (r.bb[2] < bb[0] - pad || r.bb[0] > bb[2] + pad || r.bb[3] < bb[1] - pad || r.bb[1] > bb[3] + pad) continue;
     const c = compareRings(llRings, r.rings);
-    if (c.iou > 0 && (!best || c.iou > best.iou)) best = { ...c, file: r.file };
+    if (c.iou >= 0.05 && (!best || c.iou > best.iou)) best = { ...c, file: r.file };
   }
   return best;
 }
@@ -321,7 +331,7 @@ async function main() {
       if (refs.length) {
         // ყველა ჯგუფი ერთად (გარე + ხვრელები), lon/lat
         const llRings = ll.flatMap(p => [p.outer, ...p.holes]);
-        ref = bestReference(llRings, refs);
+        ref = bestReference(llRings, refs, g.meta.code);
         if (ref) Object.assign(row, { refIoU: +ref.iou.toFixed(4), refHausdorff: +ref.hausdorff.toFixed(3), refMean: +ref.meanDist.toFixed(3),
           refShiftE: +ref.shiftE.toFixed(3), refShiftN: +ref.shiftN.toFixed(3), refFile: ref.file });
       }
